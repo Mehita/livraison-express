@@ -105,3 +105,15 @@ def assign_order_id(order: OrderFeatures) -> OrderFeatures:
     if order.order_id is not None:
         return order
     return replace(order, order_id=f"CMD-{uuid4().hex[:8].upper()}")
+
+
+@dataclass(frozen=True)
+class LabeledOrder:
+    """A past order and what really happened: the training example.
+
+    Kept apart from `OrderFeatures` on purpose: the API receives orders *without* the
+    answer, and the target must never leak into the input of a prediction.
+    """
+
+    order: OrderFeatures
+    express_eligible: bool
