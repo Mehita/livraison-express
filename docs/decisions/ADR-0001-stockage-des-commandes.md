@@ -6,25 +6,29 @@
 
 ## Contexte
 
-(À écrire : le besoin et les contraintes. Une commande est écrite une fois et lue
-plusieurs fois, `save` doit être idempotent sur order_id, les données doivent survivre
-à un redémarrage, aucune infrastructure à installer en séance 1.)
+L'application doit enregistrer les commandes pour pouvoir les consulter plusieurs fois et les utiliser pour prédire si une livraison peut être effectuée le jour même.
+Les données doivent être conservées après un redémarrage. La méthode save ne doit pas créer de doublons lorsqu'une commande avec le même order_id est enregistrée plusieurs fois.
+Pour la séance 1, la solution doit être simple à mettre en place et ne nécessiter aucune infrastructure supplémentaire.
+
+
 
 ## Options considérées
 
-| Option | Avantages | Inconvénients |
-|---|---|---|
-| A. En mémoire | | |
-| B. SQLite | | |
-| C. PostgreSQL | | |
-| D. Redis | | |
+| Option         | Avantages       | Inconvénients |
+|---             |---              |---            |
+| A. En mémoire  | Simple et Rapide| Données perdues au redémarrage|
+| B. SQLite      |Simple, intégré à Python, conserve les données dans un fichier | Moins adapté à des écritures simultanées|
+| C. PostgreSQL  |Robuste et peut fonctionner sur accès simultané | Nécessite un serveur et une configuration|
+| D. Redis       |Très rapide pour accéder aux données| Pas le meilleur choix pour stocker des commandes durablement|
 
 ## Décision
 
-(À écrire : l'option retenue et pourquoi, en précisant qu'elle est provisoire.)
+Je choisis SQLite pour la séance 1. C'est une solution simple qui permet de conserver les commandes sans installer de serveur.
+Cette décision est provisoire en fonction de l'évolution des demandes du projet.
 
 ## Conséquences
 
-(À écrire : ce que ça simplifie, ce que ça complique, ce qui se passe si la base est
-indisponible au démarrage, comment on gère deux écritures simultanées sur le même
-order_id, et quand passer à PostgreSQL.)
+SQLite permet de conserver les données après un redémarrage et de démarrer le projet rapidement.
+Si la base de données est indisponible au démarrage, l'application doit signaler l'erreur et ne pas démarrer normalement sans pouvoir accéder aux données.
+Si deux sauvegardes concernent le même order_id, une contrainte d'unicité empêchera la création de doublons. 
+Si plusieurs instances de l'application doivent accéder aux mêmes données ou si les écritures deviennent trop nombreuses, nous pourrons envisager de passer à PostgreSQL.
