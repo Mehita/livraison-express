@@ -38,3 +38,6 @@ class InvalidOrderError(DomainError):
 
 # TODO (session 1): add the errors you need (see docstring).
 # DataQualityError and PredictionStoreError are used from session 4 and 5.
+
+class OrderNotFoundError(DomainError):
+    """Aucune commande ne porte cet identifiant."""
