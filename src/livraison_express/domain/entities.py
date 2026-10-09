@@ -11,8 +11,9 @@ il reprend exactement les `FEATURE_COLUMNS` de la cellule 20 du notebook.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
+from uuid import uuid4
 
 # Variables du modèle (cellule 20 du notebook). Déclarées ICI, une seule fois :
 # l'API, le modèle et les tests les importent (DRY).
@@ -97,3 +98,10 @@ class ModelCard:
     """
 
     ...
+
+
+def assign_order_id(order: OrderFeatures) -> OrderFeatures:
+    """Return the order with an identifier: the one it has, or a generated one."""
+    if order.order_id is not None:
+        return order
+    return replace(order, order_id=f"CMD-{uuid4().hex[:8].upper()}")

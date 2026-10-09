@@ -1,48 +1,65 @@
-"""Tests du cas d'usage de prédiction.
-
-Séance 1 — TODO : implémenter.
-
-Un test de cas d'usage ne teste pas le modèle : il teste l'**orchestration**. Est-ce que
-le cas dusage appelle bien le prédicteur ? Est-ce qu'il persiste ce qu'il doit
-persister ? Est-ce qu'il laisse remonter les erreurs du domaine au lieu de les
-avaler ?
-
-C'est le niveau de test qui a le meilleur rapport valeur / coût de ce projet, parce
-qu'il tient en quelques lignes et qu'il casse dès qu'une règle d'orchestration bouge.
-"""
+"""Tests du cas d'usage de prédiction : on teste l'orchestration, pas le modèle."""
 
 from __future__ import annotations
 
-# TODO (session 1): implement these tests.
-#
-# 1. test_execute_delegates_to_the_predictor
-#    the use case calls the predictor and returns what it returns.
-#    Use a fake predictor that records the call, or monkeypatch.
-# 2. test_execute_persists_the_prediction
-#    if you decided in the ADR to persist the prediction, assert it is readable
-#    afterwards. If you decided NOT to persist it here, replace this test by a test
-#    asserting the opposite — a decision has to be tested as well as a feature.
-# 3. test_domain_errors_are_not_swallowed
-#    if the predictor raises InvalidOrderError, `execute` propagates it (it does not
-#    return None, it does not wrap it into a generic Exception). An application that
-#    hides its errors cannot be monitored (session 7).
-# 4. test_use_case_does_not_depend_on_the_technology
-#    a test that only imports `application` + `abstractions` + `domain` and never
-#    `infrastructure`... write it as an import guard with `ast` or run it as a
-#    separate test file, see docs/decisions/README.md. A cheap way to enforce the
-#    dependency rule is to grep the imports in CI (session 3).
+from dataclasses import replace
+from datetime import UTC, datetime
+
+import pytest
+
+from livraison_express.application.predict_eligibility import PredictEligibility
+from livraison_express.domain.entities import OrderFeatures, Prediction
+from livraison_express.domain.exceptions import InvalidOrderError
 
 
-def test_execute_delegates_to_the_predictor() -> None:
+class RecordingPredictor:
+    """Faux prédicteur : mémorise la commande reçue, renvoie un résultat prévu."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.received: OrderFeatures | None = None
+        self._error = error
+
+    def predict(self, order: OrderFeatures) -> Prediction:
+        self.received = order
+        if self._error is not None:
+            raise self._error
+        return Prediction(
+            order_id=order.order_id,
+            express_eligible=True,
+            decision="oui",
+            probability=0.9,
+            model_version="1.0.0",
+            predicted_at=datetime.now(UTC),
+        )
+
+
+def test_execute_delegates_to_the_predictor(sample_order: OrderFeatures) -> None:
     """The use case delegates the computation to the predictor."""
-    raise NotImplementedError
+    predictor = RecordingPredictor()
+
+    prediction = PredictEligibility(predictor).execute(sample_order)
+
+    assert predictor.received is not None
+    assert prediction.decision == "oui"
+    assert prediction.order_id == predictor.received.order_id
 
 
-def test_execute_persists_the_prediction() -> None:
-    """The prediction is persisted (or explicitly not, per the ADR)."""
-    raise NotImplementedError
+def test_execute_assigns_an_order_id_when_missing(sample_order: OrderFeatures) -> None:
+    """The use case does not persist the prediction: it guarantees an order_id."""
+    predictor = RecordingPredictor()
+    use_case = PredictEligibility(predictor)
+
+    use_case.execute(sample_order)
+    assert predictor.received is not None
+    assert predictor.received.order_id.startswith("CMD-")
+
+    use_case.execute(replace(sample_order, order_id="CMD-000042"))
+    assert predictor.received.order_id == "CMD-000042"
 
 
-def test_domain_errors_are_not_swallowed() -> None:
+def test_domain_errors_are_not_swallowed(sample_order: OrderFeatures) -> None:
     """A domain error raised by the predictor reaches the API layer unchanged."""
-    raise NotImplementedError
+    predictor = RecordingPredictor(error=InvalidOrderError("variable manquante"))
+
+    with pytest.raises(InvalidOrderError):
+        PredictEligibility(predictor).execute(sample_order)
