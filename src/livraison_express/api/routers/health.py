@@ -1,44 +1,51 @@
 """Routeur : sondes de vivacité et de disponibilité.
 
-Séance 1 — TODO : implémenter.
-
-La différence entre les deux sondes est l'une des distinctions les plus importantes
-en exploitation, et elle est trop souvent oubliée :
-
 | Sonde | Question | Dépendances | Usage |
 |---|---|---|---|
 | `/health` | le processus répond-il ? | aucune | l'orchestrateur redémarre le conteneur |
-| `/health/ready` | le service peut-il traiter une requête ? | modèle chargé, dépendances joignables | l'orchestrateur arrête d'envoyer du trafic |
+| `/health/ready` | peut-il traiter une requête ? | modèle chargé, store joignable | l'orchestrateur coupe le trafic |
 
-Conséquence à comprendre : si `/health` dépend de la base de données, un incident de la
-base déclenche des redémarrages de conteneurs qui n'y peuvent rien. `/health` doit
-répondre 200 même quand tout le reste est cassé.
-
-`GET /health/ready` renvoie 503 quand le modèle n'est pas chargé : c'est le comportement
-attendu au démarrage, avant que `bootstrap.py` n'ait chargé l'artefact, et après un
-incident de disque.
-
-TODO (session 1)
----------------
-- implémenter les deux handlers et leurs schémas de réponse (`HealthStatus`,
-  `ReadinessStatus`) ;
-- écrire un test qui vérifie que `/health` renvoie 200 même quand les dépendances sont
-  dans le rouge (voir `tests/test_api_predictions.py` pour le modèle de test) ;
-- la réponse doit-elle exposer la version ? Comparez avec le contrat OpenAPI.
+`/health` ne dépend de rien : si elle dépendait de la base, un incident de base
+déclencherait des redémarrages de conteneurs qui n'y peuvent rien. Elle répond 200 même
+quand tout le reste est cassé. `/health/ready` répond 503 tant que le modèle n'est pas chargé.
 """
 
 from __future__ import annotations
 
-# TODO (session 1): declare the router here.
-#
-# Expected shape:
-#
-#   from fastapi import APIRouter, Response, status
-#
-#   router = APIRouter(tags=["health"])
-#
-#   @router.get("/health", response_model=HealthStatus)
-#   def get_health() -> HealthStatus: ...
-#
-#   @router.get("/health/ready", response_model=ReadinessStatus)
-#   def get_readiness(response: Response) -> ReadinessStatus: ...
+from fastapi import APIRouter, Request, Response
+
+from ..metadata import API_VERSION, SERVICE_NAME
+from ..schemas import HealthStatus, ReadinessStatus
+
+router = APIRouter(tags=["health"])
+
+
+@router.get("/health", response_model=HealthStatus)
+def get_health() -> HealthStatus:
+    """Liveness: the process answers."""
+    return HealthStatus(service=SERVICE_NAME, version=API_VERSION)
+
+
+@router.get("/health/ready", response_model=ReadinessStatus)
+def get_readiness(request: Request, response: Response) -> ReadinessStatus:
+    """Readiness: 200 only if a prediction can be served, 503 otherwise."""
+    container = request.app.state.container
+    checks = {
+        "model": "loaded" if container.model_ready else "missing",
+        "order_store": _order_store_status(container),
+    }
+    ready = all(value in {"loaded", "reachable"} for value in checks.values())
+    if not ready:
+        response.status_code = 503
+    return ReadinessStatus(
+        status="ready" if ready else "not_ready", checks=checks, version=API_VERSION
+    )
+
+
+def _order_store_status(container) -> str:
+    """Probe the store with a harmless read; any failure means 'unreachable'."""
+    try:
+        container.order_store.get("__readiness_probe__")
+    except Exception:
+        return "unreachable"
+    return "reachable"

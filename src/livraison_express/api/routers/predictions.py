@@ -1,37 +1,31 @@
 """Routeur : prédictions.
 
-Séance 1 — TODO : implémenter.
+`POST /v1/predictions` est la cellule 34 du notebook exposée en HTTP. Le routeur convertit
+et délègue : la logique de décision est dans le domaine, pas ici.
 
-`POST /v1/predictions` est l'élément « Exposer une fonction de prédiction » du tableau
-des éléments à industrialiser : c'est la cellule 34 du notebook, exposée en HTTP.
+Le modèle absent n'est pas géré par un `if` : le fournisseur de dépendance lève
+`ModelNotAvailableError`, que `errors.py` traduit en 503.
 
-`POST /v1/predictions/batch` et `GET /v1/predictions/{order_id}` arrivent en séance 5,
-avec la lecture de l'historique : ne les implémentez pas maintenant (YAGNI).
-
-TODO (session 1)
----------------
-- implémenter `POST /v1/predictions` ;
-- `response_model=` doit être le schéma Pydantic de `api/schemas.py`, pas le type du
-  domaine : c'est ce qui fait que FastAPI valide la réponse et documente l'API ;
-- le schéma de la réponse a un champ `latency_ms` (séance 7 pour le remplir, mais le
-  champ existe dès le contrat : votre réponse doit rester conforme dès la séance 1) ;
-- gérer le cas « modèle pas chargé » : 503, via `ModelNotAvailableError` et
-  `api/errors.py`, pas via un `if` dans le handler.
-
-TODO (session 5): ajouter `POST /v1/predictions/batch` et `GET /v1/predictions/{order_id}`
-lorsque le cas d'usage batch et le `PredictionStore` existeront.
+`/batch` et `/{order_id}` arrivent en séance 5 : on ne les écrit pas maintenant (YAGNI).
 """
 
 from __future__ import annotations
 
-# TODO (session 1): declare the router and POST /v1/predictions.
-#
-# Expected shape:
-#
-#   router = APIRouter(prefix="/v1/predictions", tags=["predictions"])
-#
-#   @router.post("", response_model=PredictionSchema)
-#   def create_prediction(
-#       order: OrderFeaturesSchema,
-#       use_case: PredictEligibility = Depends(get_predict_eligibility_use_case),
-#   ) -> PredictionSchema: ...
+from fastapi import APIRouter, Depends
+
+from ...application.predict_eligibility import PredictEligibility
+from ..dependencies import get_predict_eligibility_use_case
+from ..mappers import to_order, to_prediction_schema
+from ..schemas import OrderFeaturesSchema
+from ..schemas import Prediction as PredictionSchema
+
+router = APIRouter(prefix="/v1/predictions", tags=["predictions"])
+
+
+@router.post("", response_model=PredictionSchema, response_model_exclude_none=True)
+def create_prediction(
+    order: OrderFeaturesSchema,
+    use_case: PredictEligibility = Depends(get_predict_eligibility_use_case),
+) -> PredictionSchema:
+    """Predict the express eligibility of one order (synchronous)."""
+    return to_prediction_schema(use_case.execute(to_order(order)))

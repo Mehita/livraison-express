@@ -1,35 +1,46 @@
 """Assemblage de l'application FastAPI.
 
-Séance 1 — TODO : implémenter.
+`create_app()` est, avec `bootstrap.py`, la racine de composition : le conteneur d'objets
+est posé sur `app.state`, les routeurs le lisent via `dependencies.py`.
 
-`create_app()` est le seul endroit autorisé à importer à la fois `api` et
-`infrastructure` : c'est la racine de composition (composition root). Partout ailleurs,
-on dépend d'abstractions.
-
-TODO (session 1)
----------------
-1. `create_app()` : instancier `FastAPI(...)` avec les métadonnées de l'API
-   (titre, version, description) issues de `docs/api/openapi.yml` ;
-2. enregistrer les routeurs (`/health`, `/v1/orders`, `/v1/predictions`, `/v1/model`) ;
-3. enregistrer les gestionnaires d'exceptions de `api/errors.py` ;
-4. installer le middleware de logs structurés (voir `api/errors.py` ou createz
-   `api/middleware.py`) : une ligne de log par requête, en JSON, avec la durée.
-
-Ce que `create_app()` ne doit PAS contenir : de la logique métier, un accès direct à
-une base de données, un `joblib.load` dans le handler. Le chargement du modèle se fait
-une fois au démarrage, dans `bootstrap.py`.
+Le modèle est chargé une seule fois, au démarrage (lifespan), jamais dans un handler. Son
+absence n'empêche pas l'API de démarrer : `/health/ready` répond 503.
 """
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
+from ..bootstrap import Container, get_container
+from .errors import register_exception_handlers
+from .metadata import API_DESCRIPTION, API_VERSION, SERVICE_NAME
+from .routers import health, orders, predictions
 
-def create_app() -> FastAPI:
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Load the model once at startup (unless the container already has one)."""
+    container: Container = app.state.container
+    if not container.model_ready:
+        container.load_model()
+    yield
+
+
+def create_app(container: Container | None = None) -> FastAPI:
     """Build the FastAPI application.
 
-    TODO (session 1): implement. Signature and lifespan are already decided: the
-    model is loaded once at startup and released at shutdown, so a request handler
-    never pays for it.
+    Tests pass their own `container` (fake model, in-memory store); in production the
+    container is built from the environment.
     """
-    raise NotImplementedError
+    app = FastAPI(
+        title=SERVICE_NAME, version=API_VERSION, description=API_DESCRIPTION, lifespan=lifespan
+    )
+    app.state.container = container or get_container()
+    register_exception_handlers(app)
+    app.include_router(health.router)
+    app.include_router(orders.router)
+    app.include_router(predictions.router)
+    return app

@@ -5,10 +5,17 @@ Les tests doivent être rapides et hermétiques : aucun modèle réel, aucune ba
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
+from fastapi.testclient import TestClient
 
+from livraison_express.api.app import create_app
+from livraison_express.bootstrap import Container, build_container
+from livraison_express.config import Settings
 from livraison_express.domain.entities import OrderFeatures
+from livraison_express.domain.predictor import EligibilityPredictor
 from livraison_express.infrastructure.dev.in_memory_order_store import InMemoryOrderStore
 
 
@@ -54,6 +61,24 @@ def order_store() -> object:
 
 
 @pytest.fixture
-def api_client() -> object:
+def container(tmp_path: Path, fake_model: FakeModel) -> Container:
+    """Return a test container: in-memory store, fake model loaded (probability 0.6)."""
+    settings = Settings(
+        environment="test",
+        model_path=str(tmp_path / "model.joblib"),
+        model_threshold=0.5,
+        model_version="1.0.0",
+        order_store_dsn="unused-in-test",
+        log_level="INFO",
+    )
+    test_container = build_container(settings)
+    test_container.predictor = EligibilityPredictor(
+        model=fake_model, threshold=0.5, model_version="1.0.0"
+    )
+    return test_container
+
+
+@pytest.fixture
+def api_client(container: Container) -> TestClient:
     """Return a TestClient for the application, with test dependencies."""
-    raise NotImplementedError
+    return TestClient(create_app(container))

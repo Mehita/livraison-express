@@ -60,9 +60,9 @@ class OrderFeaturesSchema(BaseModel):
     stock_available: int = Field(ge=0, le=1, examples=[1])
     preparation_time_min: float = Field(ge=0, examples=[18])
     carrier_capacity: float = Field(ge=0, le=1, examples=[0.85])
-    weather: Weather = Weather.WEATHER_NORMAL
-    delivery_zone: DeliveryZone = DeliveryZone.ZONE_CENTRE
-    customer_type: CustomerType = CustomerType.TYPE_PREMIUM
+    weather: Weather
+    delivery_zone: DeliveryZone
+    customer_type: CustomerType
 
 
 class OrderAccepted(BaseModel):

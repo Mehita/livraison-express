@@ -1,78 +1,150 @@
-"""Tests de l'API HTTP.
+"""Tests de l'API HTTP : toute la pile (routeur -> cas d'usage -> domaine), sans modèle réel.
 
-Séance 1 — TODO : implémenter.
-
-Ce sont des tests d'intégration légers : ils traversent toute la pile (routeur →
-cas d'usage → domaine) mais avec des doublures pour les dépendances externes. Ils ne
-doivent jamais exiger une base de données ni un modèle entraîné.
-
-Ce qu'ils vérifient, au-delà du simple « ça renvoie 200 » :
-
-- le **contrat** : le corps de la réponse correspond à `docs/api/openapi.yml` ;
-- les **codes d'erreur** : 422 pour une commande invalide, 404 pour une commande
-  inconnue, 503 quand le modèle est absent. Une API qui renvoie 500 sur une erreur
-  métier est une API cassée ;
-- l'**isolation** : un test ne doit pas polluer le suivant (utilisez les fixtures).
-
-TODO (séance 1)
---------------
-1. test_predict_returns_200_and_a_valid_body — valeurs de la cellule 36.
-2. test_predict_returns_422_on_invalid_order — retirez `distance_km`.
-3. test_predict_returns_503_when_the_model_is_missing — remplacez le modèle par None
-   via `app.dependency_overrides` et vérifiez le code ET le corps d'erreur.
-4. test_health_returns_200 — et, si vous avez implémenté `/health/ready`,
-   `test_readiness_returns_503_when_the_model_is_missing`.
-5. test_collect_order_returns_202 — vérifiez aussi que l'ordre est relisible.
-6. test_response_matches_the_openapi_contract — comparez les clés du JSON retourné
-   avec le schéma `Prediction` de `docs/api/openapi.yml`. C'est le test qui valide
-   votre interprétation du contrat, et il vous évitera des surprises le jour de la
-soutenance.
-
-TODO (session 3): ajouter un test sur GET /v1/model.
-TODO (session 7): ajouter un test sur la présence des métriques exposées.
+Ils vérifient le contrat `docs/api/openapi.yml` et les codes d'erreur : une erreur métier
+ne doit jamais produire un 500.
 """
 
 from __future__ import annotations
 
-# TODO (session 1): implement these tests.
-#
-# Expected shape:
-#
-#   from fastapi.testclient import TestClient
-#
-#   def test_predict_returns_200_and_a_valid_body(api_client: TestClient) -> None:
-#       response = api_client.post("/v1/predictions", json=VALID_ORDER)
-#       assert response.status_code == 200
-#       body = response.json()
-#       assert body["decision"] in {"oui", "non"}
-#       assert 0.0 <= body["probability"] <= 1.0
+from pathlib import Path
+
+import yaml
+from fastapi.testclient import TestClient
+
+from livraison_express.api.app import create_app
+from livraison_express.bootstrap import Container
+
+CONTRACT = Path(__file__).resolve().parent.parent / "docs" / "api" / "openapi.yml"
+
+VALID_ORDER = {
+    "hour": 14,
+    "day_of_week": 2,
+    "weekend": 0,
+    "distance_km": 3.5,
+    "order_value_eur": 89.9,
+    "weight_kg": 2.4,
+    "stock_available": 1,
+    "preparation_time_min": 18,
+    "carrier_capacity": 0.85,
+    "weather": "normal",
+    "delivery_zone": "centre",
+    "customer_type": "premium",
+}
 
 
-def test_predict_returns_200_and_a_valid_body() -> None:
+def test_predict_returns_200_and_a_valid_body(api_client: TestClient) -> None:
     """POST /v1/predictions answers 200 with a contract-compliant body."""
-    raise NotImplementedError
+    response = api_client.post("/v1/predictions", json=VALID_ORDER)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["decision"] == "oui"  # fake model: probability 0.6 >= threshold 0.5
+    assert body["express_eligible"] is True
+    assert 0.0 <= body["probability"] <= 1.0
+    assert body["model_version"] == "1.0.0"
+    assert body["order_id"].startswith("CMD-")
 
 
-def test_predict_returns_422_on_invalid_order() -> None:
-    """POST /v1/predictions answers 422 when a feature is missing."""
-    raise NotImplementedError
+def test_predict_returns_422_on_invalid_order(api_client: TestClient) -> None:
+    """POST /v1/predictions answers 422, in the contract's error format."""
+    order = {key: value for key, value in VALID_ORDER.items() if key != "distance_km"}
+
+    response = api_client.post("/v1/predictions", json=order)
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"] == "validation_error"
+    assert any("distance_km" in detail for detail in body["details"])
 
 
-def test_predict_returns_503_when_the_model_is_missing() -> None:
-    """POST /v1/predictions answers 503 when no model is loaded."""
-    raise NotImplementedError
+def test_predict_rejects_unknown_and_missing_categorical_fields(api_client: TestClient) -> None:
+    """The contract says: any missing or extra variable is a 422."""
+    extra = {**VALID_ORDER, "colour": "red"}
+    no_weather = {key: value for key, value in VALID_ORDER.items() if key != "weather"}
+
+    assert api_client.post("/v1/predictions", json=extra).status_code == 422
+    assert api_client.post("/v1/predictions", json=no_weather).status_code == 422
 
 
-def test_health_returns_200() -> None:
-    """GET /health answers 200 even when the dependencies are down."""
-    raise NotImplementedError
+def test_predict_returns_503_when_the_model_is_missing(container: Container) -> None:
+    """POST /v1/predictions answers 503 and the error body when no model is loaded."""
+    container.predictor = None
+    client = TestClient(create_app(container))
+
+    response = client.post("/v1/predictions", json=VALID_ORDER)
+
+    assert response.status_code == 503
+    assert response.json()["error"] == "model_unavailable"
 
 
-def test_collect_order_returns_202() -> None:
+def test_health_returns_200(container: Container) -> None:
+    """GET /health answers 200 even when the model is missing."""
+    container.predictor = None
+    client = TestClient(create_app(container))
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
+def test_readiness_is_200_with_a_model_and_503_without(container: Container) -> None:
+    """GET /health/ready tells the orchestrator whether to send traffic."""
+    ready = TestClient(create_app(container)).get("/health/ready")
+    container.predictor = None
+    not_ready = TestClient(create_app(container)).get("/health/ready")
+
+    assert ready.status_code == 200
+    assert ready.json()["status"] == "ready"
+    assert not_ready.status_code == 503
+    assert not_ready.json()["status"] == "not_ready"
+    assert not_ready.json()["checks"]["model"] == "missing"
+
+
+def test_collect_order_returns_202(api_client: TestClient) -> None:
     """POST /v1/orders answers 202 and the order is readable afterwards."""
-    raise NotImplementedError
+    response = api_client.post("/v1/orders", json=VALID_ORDER)
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["status"] == "accepted"
+    read_back = api_client.get(f"/v1/orders/{body['order_id']}")
+    assert read_back.status_code == 200
+    assert read_back.json()["distance_km"] == VALID_ORDER["distance_km"]
 
 
-def test_response_matches_the_openapi_contract() -> None:
+def test_collect_order_works_without_a_model(container: Container) -> None:
+    """Collection does not depend on the model: it stays up while predictions answer 503."""
+    container.predictor = None
+    client = TestClient(create_app(container))
+
+    assert client.post("/v1/orders", json=VALID_ORDER).status_code == 202
+
+
+def test_unknown_order_returns_404(api_client: TestClient) -> None:
+    """GET /v1/orders/{id} answers 404 with the contract's error format."""
+    response = api_client.get("/v1/orders/CMD-INCONNU")
+
+    assert response.status_code == 404
+    assert response.json()["error"] == "order_not_found"
+
+
+def test_response_matches_the_openapi_contract(api_client: TestClient) -> None:
     """The response body matches the Prediction schema of docs/api/openapi.yml."""
-    raise NotImplementedError
+    contract = yaml.safe_load(CONTRACT.read_text(encoding="utf-8"))
+    schema = contract["components"]["schemas"]["Prediction"]
+
+    body = api_client.post("/v1/predictions", json=VALID_ORDER).json()
+
+    assert set(schema["required"]) <= set(body)
+    assert set(body) <= set(schema["properties"])
+    assert body["decision"] in schema["properties"]["decision"]["enum"]
+
+
+def test_paths_of_the_app_are_declared_in_the_contract(api_client: TestClient) -> None:
+    """Every route exposed by FastAPI exists in the contract (no invented endpoint)."""
+    contract_paths = set(yaml.safe_load(CONTRACT.read_text(encoding="utf-8"))["paths"])
+
+    app_paths = set(api_client.get("/openapi.json").json()["paths"])
+
+    assert app_paths <= contract_paths
