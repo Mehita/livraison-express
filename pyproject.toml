@@ -35,7 +35,5 @@ extend-exclude = ["notebooks"]
 select = ["E4", "E7", "E9", "F", "I"]
 
 [tool.ruff.lint.per-file-ignores]
-# The skeletons of session 1 are intentionally incomplete: unused imports there are
-# the implementation guide. Remove this exception once your code is written.
-"src/livraison_express/domain/entities.py" = ["F401"]
+# domain/quality.py is the skeleton of session 4: its imports are unused until then.
 "src/livraison_express/domain/quality.py" = ["F401"]

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pandas as pd
+
 from livraison_express.abstractions.model_repository import ModelRepository
 from livraison_express.application.train_model import TrainEligibilityModel, build_model
 from livraison_express.domain.entities import FEATURE_COLUMNS, ModelCard
@@ -61,3 +63,17 @@ def test_same_seed_gives_the_same_metrics() -> None:
     assert _use_case(RecordingRepository()).execute().metrics == (
         _use_case(RecordingRepository()).execute().metrics
     )
+
+
+def test_unknown_category_does_not_crash_the_trained_model() -> None:
+    """OneHotEncoder(handle_unknown="ignore"): a new weather is ignored, not a 500."""
+    repository = RecordingRepository()
+    _use_case(repository).execute()
+    model = repository.saved[0][0]
+    order = generate_labeled_orders(1)[0].order
+    row = {name: getattr(order, name) for name in FEATURE_COLUMNS}
+    row["weather"] = "grele"
+
+    probability = model.predict_proba(pd.DataFrame([row]))[0, 1]
+
+    assert 0.0 <= probability <= 1.0
