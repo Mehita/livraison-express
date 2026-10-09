@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     environment: Literal["local", "test", "prod"]
     model_path: str
     model_threshold: float = Field(gt=0, lt=1)
+    model_version: str = Field(min_length=1)
     order_store_dsn: str
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 
