@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from livraison_express.domain.entities import OrderFeatures
+from livraison_express.infrastructure.dev.in_memory_order_store import InMemoryOrderStore
 
 
 class FakeModel:
@@ -49,7 +50,7 @@ def fake_model() -> FakeModel:
 @pytest.fixture
 def order_store() -> object:
     """Return a fresh InMemoryOrderStore, empty."""
-    raise NotImplementedError
+    return InMemoryOrderStore()
 
 
 @pytest.fixture

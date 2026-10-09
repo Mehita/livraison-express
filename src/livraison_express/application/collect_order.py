@@ -1,57 +1,40 @@
-"""Cas d'usage : collecter une commande à prédire.
+"""Cas d'usage : collecter une commande à prédire et la relire.
 
-Séance 1 — TODO : implémenter.
-
-C'est le cas d'usage « Collecte de données » du tableau des éléments à industrialiser.
-
-La question de conception centrale de ce cas d'usage : **quand** prédire ?
-
-- à la réception de la commande (synchrone, réponse immédiate à l'appelant) ;
-- de façon différée (la commande est stockée, la prédiction est calculée plus tard) ;
-- les deux.
-
-Le contrat OpenAPI de `POST /v1/orders` répond **202 Accepted** : la commande est
-acceptée, la prédiction est déjà partie ailleurs. C'est un choix d'architecture, pas
-une commodité : le chemin de code que vous écrivez ici doit être compatible avec le fait
-que la prédiction n'est pas disponible au retour de la requête.
-
-TODO (session 1)
----------------
-1. declare the fields (`order_store` is mandatory; is anything else needed?);
-2. `execute`: validate the order, persist it, return what the API needs
-   (`OrderAccepted`: an `order_id`);
-3. what happens if the same `order_id` is submitted twice? The `OrderStore` contract
-   says `save` is idempotent: the API returns 202 again, or 409? Argue it.
+`POST /v1/orders` répond 202 : la commande est acceptée et rangée, la prédiction
+viendra plus tard. Ce cas d'usage ne prédit donc rien : il n'a pas besoin du modèle,
+ce qui lui permet de fonctionner même quand `/health/ready` répond 503.
 """
 
 from __future__ import annotations
 
 from ..abstractions.order_store import OrderStore
-from ..domain.entities import OrderFeatures
+from ..domain.entities import OrderFeatures, assign_order_id
+from ..domain.exceptions import OrderNotFoundError
 
 
 class CollectOrder:
-    """Enregistre une commande à prédire.
+    """Enregistre une commande et permet de la relire.
 
-    Collaborateurs
-    --------------
-    order_store : la persistance des commandes.
-
-    TODO (session 1): implement `execute`, and add a second method to read an order
-    back (used by `GET /v1/orders/{order_id}`). Should reading be a method of this
-    same class, or another use case? Argue it.
+    Collaborateur : `order_store`, la persistance (injectée, jamais construite ici).
     """
 
     def __init__(self, order_store: OrderStore) -> None:
-        # TODO (session 1): store the collaborator.
-        raise NotImplementedError
+        self._order_store = order_store
 
     def execute(self, order: OrderFeatures) -> str:
         """Persist one order and return its identifier.
 
-        TODO (session 1):
-        - generate an `order_id` when the incoming order has none
-          (format of the notebook: `CMD-000001`, see cell 8);
-        - let the store validate the order, or validate it yourself? Argue it.
+        Re-submitting the same `order_id` is not an error: `save` is idempotent, so the
+        caller gets the same identifier again (a client that retries after a timeout
+        must not be punished by a 409).
         """
-        raise NotImplementedError
+        order = assign_order_id(order)
+        self._order_store.save(order)
+        return order.order_id
+
+    def get(self, order_id: str) -> OrderFeatures:
+        """Return a stored order, or raise OrderNotFoundError (mapped to 404)."""
+        order = self._order_store.get(order_id)
+        if order is None:
+            raise OrderNotFoundError(f"Commande inconnue : {order_id}")
+        return order
