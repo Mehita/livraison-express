@@ -1,90 +1,121 @@
 """Cas d'usage : entraîner le modèle d'éligibilité.
 
-Séance 1 — TODO : implémenter.
+Hors du chemin de la requête HTTP : l'entraînement se fait dans un job
+(`python -m livraison_express train`), jamais quand un client appelle l'API.
 
-C'est le cas d'usage « Entraînement du modèle » du tableau des éléments à industrialiser.
-Il est **hors du chemin de la requête HTTP** : l'entraînement se produit dans un job
-(`python -m livraison_express train`, ou plus tard une CI), jamais quand un client
-appelle l'API. Un service qui réentraîne à la demande est un service qui tombe.
-
-La quasi-totalité de ce cas d_usage existe déjà dans le notebook, il s'agit de le
-déplacer en trois morceaux séparés par des frontières :
+Le notebook est découpé en trois morceaux séparés par des frontières :
 
 | Étape | Cellules | Devient |
 |---|---|---|
-| 1. construire la pipeline | 20, 22, 24 | `build_model()` : une fonction pure, aucun effet de bord |
-| 2. entraîner et évaluer | 26, 28, 29, 30 | `TrainEligibilityModel.execute()` |
-| 3. persister | 41 | l'implémentation du `ModelRepository` |
+| construire la pipeline | 20, 22, 24 | `build_model()` : fonction pure |
+| entraîner et évaluer | 22, 26, 28 | `TrainEligibilityModel.execute()` |
+| persister | 41, 55 | le `ModelRepository` injecté |
 
-C'est exactement le découpage demandé par les principes du cours : une responsabilité
-par classe/méthode, et aucune dépendance inutile (l'évaluation n'écrit pas dans le
-registre de modèle, la construction de pipeline ne lit pas de données).
-
-TODO (session 1)
----------------
-1. `build_model(random_state)`: move notebook cells 20, 22 and 24 here.
-   It must be a **pure function**: same inputs, same pipeline, no I/O, no global state.
-   Test it directly — this is the easiest thing to test in the whole project.
-2. `TrainEligibilityModel.execute()`: move cells 22, 26, 28-30 here.
-   Use the `ModelRepository` abstraction to save the model and its model card (cell 55).
-   - Where do the metrics go? Into the `ModelCard` (which becomes `GET /v1/model`)?
-   - Notebook cell 26 logs to MLflow: that is another collaborator, delivered in
-     session 4 (`ExperimentTracker`). For now, either return the metrics, or print
-     them, but do not import MLflow directly here — that would couple this use case
-     to a specific tracking tool.
-3. What is the input of this use case: a `DataFrame`? A path to a dataset?
-   Decide, and note that the answer changes what you can test.
+MLflow (cellule 26) n'est pas importé ici : le suivi d'expériences sera un collaborateur
+distinct à la séance 4 (`ExperimentTracker`).
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import asdict
+
+import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
 from ..abstractions.model_repository import ModelRepository
+from ..domain.entities import (
+    CATEGORICAL_FEATURES,
+    FEATURE_COLUMNS,
+    NUMERIC_FEATURES,
+    LabeledOrder,
+    ModelCard,
+)
+
+
+def build_model(random_state: int = 42) -> Pipeline:
+    """Build the scikit-learn pipeline, without fitting it (notebook cells 20-24).
+
+    Pure function: no file access, no global state, same arguments -> same pipeline.
+    """
+    numeric_transformer = Pipeline(
+        steps=[("imputer", SimpleImputer(strategy="median")), ("scaler", StandardScaler())]
+    )
+    categorical_transformer = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
+        ]
+    )
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("numeric", numeric_transformer, NUMERIC_FEATURES),
+            ("categorical", categorical_transformer, CATEGORICAL_FEATURES),
+        ]
+    )
+    classifier = LogisticRegression(
+        max_iter=1000, class_weight="balanced", random_state=random_state
+    )
+    return Pipeline(steps=[("preprocessor", preprocessor), ("classifier", classifier)])
 
 
 class TrainEligibilityModel:
-    """Entraîne le modèle de prédiction et le rend disponible au service.
+    """Entraîne le modèle, l'évalue, puis le range avec sa fiche d'identité.
 
     Collaborateurs
     --------------
     model_repository : destination des artefacts (cellule 41).
-    dataset : source des données d'entraînement. TODO (session 1): the notebook
-    generates them synthetically (cell 8, `generate_orders_dataset`). In production
-    this is an existing dataset: where does it come from? Make it a collaborator
-    (a new abstraction) rather than an import, or your use case will not be testable
-    without generating 6000 rows.
-
-    TODO (session 1): declare the fields and implement `execute`.
+    load_orders : fournit les commandes passées avec leur résultat. C'est une fonction
+        injectée et non un import : en production les données ne seront plus synthétiques,
+        et le test n'a pas besoin de générer 6 000 lignes.
     """
 
-    def __init__(self, model_repository: ModelRepository) -> None:
-        # TODO (session 1): store the collaborators.
-        raise NotImplementedError
+    def __init__(
+        self,
+        model_repository: ModelRepository,
+        load_orders: Callable[[], list[LabeledOrder]],
+        model_version: str,
+        random_state: int = 42,
+    ) -> None:
+        self._model_repository = model_repository
+        self._load_orders = load_orders
+        self._model_version = model_version
+        self._random_state = random_state
 
-    def execute(self) -> None:
-        """Train the model, evaluate it, then persist it with its model card.
+    def execute(self) -> ModelCard:
+        """Train, evaluate, then persist. Never saves a model that was not evaluated."""
+        features, target = self._to_training_frame(self._load_orders())
+        x_train, x_test, y_train, y_test = train_test_split(
+            features, target, test_size=0.20, random_state=self._random_state, stratify=target
+        )
 
-        TODO (session 1): move notebook cells 22, 26, 28-30 and 41 here.
+        model = build_model(self._random_state)
+        model.fit(x_train, y_train)
 
-        Order matters: evaluate BEFORE saving, and never save a model you did not
-        evaluate. A model saved without its metrics is an artifact nobody can defend.
-        """
-        raise NotImplementedError
+        y_pred = model.predict(x_test)
+        y_proba = model.predict_proba(x_test)[:, 1]
+        metrics = {
+            "accuracy": float(accuracy_score(y_test, y_pred)),
+            "precision": float(precision_score(y_test, y_pred, zero_division=0)),
+            "recall": float(recall_score(y_test, y_pred, zero_division=0)),
+            "f1_score": float(f1_score(y_test, y_pred, zero_division=0)),
+            "roc_auc": float(roc_auc_score(y_test, y_proba)),
+        }
 
+        card = ModelCard(
+            model_version=self._model_version, features=list(FEATURE_COLUMNS), metrics=metrics
+        )
+        self._model_repository.save(model, card)
+        return card
 
-def build_model(random_state: int = 42) -> object:
-    """Build the scikit-learn pipeline, without fitting it.
-
-    Move notebook cells 20, 22 and 24 here.
-
-    Pure function of its argument: no file access, no randomness that is not seeded,
-    no global variable. This is the function you will unit-test, and the one that lets
-    the training script and the API agree on the same features.
-
-    TODO (session 1): implement. Use the constants declared in `domain/entities.py`
-    (FEATURE_COLUMNS, NUMERIC_FEATURES, CATEGORICAL_FEATURES) instead of redefining
-    the lists from cell 20 (DRY).
-
-    Note: `train_test_split` belongs to the *training* case (step 2), not here. The
-    pipeline does not need to know about splits.
-    """
-    raise NotImplementedError
+    @staticmethod
+    def _to_training_frame(orders: list[LabeledOrder]) -> tuple[pd.DataFrame, pd.Series]:
+        rows = [{name: asdict(item.order)[name] for name in FEATURE_COLUMNS} for item in orders]
+        target = pd.Series([int(item.express_eligible) for item in orders], name="express_eligible")
+        return pd.DataFrame(rows, columns=FEATURE_COLUMNS), target

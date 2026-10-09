@@ -64,7 +64,7 @@ class FileModelRepository(ModelRepository):
         self._model_path.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(model, self._model_path)
         self._model_path.with_suffix(".metrics.json").write_text(
-            json.dumps(model_card.metrics), indent=2, sort_keys=True
+            json.dumps(model_card.metrics, indent=2, sort_keys=True)
         )
         self._model_path.with_suffix(".features.json").write_text(
             json.dumps(model_card.features, indent=2)

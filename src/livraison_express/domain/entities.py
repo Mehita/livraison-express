@@ -92,12 +92,16 @@ class OrderEvent:
 
 @dataclass(frozen=True)
 class ModelCard:
-    """Métadonnées et métriques du modèle en service (cellule 55 du notebook).
+    """Fiche d'identité du modèle en service (cellule 55 du notebook).
 
-    TODO (session 3): declare the fields of the `ModelCard` schema.
+    Version minimale de la séance 1 : ce qu'il faut pour sauvegarder un modèle de façon
+    cohérente (version, variables, métriques). La séance 3 l'enrichira pour
+    `GET /v1/model` (limites, seuil, volumes d'entraînement).
     """
 
-    ...
+    model_version: str
+    features: list[str]
+    metrics: dict[str, float]
 
 
 def assign_order_id(order: OrderFeatures) -> OrderFeatures:
