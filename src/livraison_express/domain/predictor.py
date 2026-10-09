@@ -1,62 +1,43 @@
-"""Le prédicteur : le cœur métier de l'application.
-
-Séance 1 — TODO : implémenter.
-
-C'est la fonction `predict_order_eligibility` de la **cellule 34 du notebook**, à déplacer
-telle quelle. Tout le TP du jour consiste à la rendre testable et à la brancher sur l'API.
-
-Trois points de conception à traiter, ils sont la valeur pédagogique de cette séance :
-
-1. **Le type d'entrée.** La cellule 34 attend un `dict` brut. Ici elle attend un
-   `OrderFeatures` et renvoie un `Prediction`. Qui fait la conversion ?
-   C'est à vous de décider où s'arrête la conversion `dict` → `OrderFeatures`
-   (proposition : dans la couche API, `api/routers/predictions.py`).
-
-2. **La dépendance au modèle.** La cellule 34 reçoit l'objet `model` en paramètre.
-   Une classe, elle, reçoit ce modèle **au constructeur**. C'est ce qui la rend
-   testable : un test lui passe un faux modèle, sans joblib ni MLflow.
-
-3. **L'erreur sur variable manquante.** La cellule 34 lève `ValueError` avec la liste
-   des variables manquantes. Une `ValueError` n'est pas une erreur métier : quelle
-   erreur de `domain/exceptions.py` faut-il lever, et pourquoi (c'est la question qui
-   distingue une 422 d'une 500) ?
-"""
+"""Le prédicteur : le cœur métier de l'application (cellule 34 du notebook)."""
 
 from __future__ import annotations
 
-from .entities import OrderFeatures, Prediction
+from datetime import datetime, timezone
+
+import pandas as pd
+
+from .entities import FEATURE_COLUMNS, OrderFeatures, Prediction
+from .exceptions import InvalidOrderError
 
 
 class EligibilityPredictor:
     """Prédit l'éligibilité d'une commande à la livraison express.
 
-    Collaborateurs
-    --------------
-    model : l'artefact de modèle chargé (pipeline scikit-learn). Ce n'est pas un type
-        du domaine, d'où son annotation en `object` : le domaine ignore scikit-learn.
-        À affiner si vous introduisez un type d'artefact dans `domain/entities.py`.
-    threshold : probabilité au-dessus de laquelle la commande est éligible
-        (cellule 31 : le 0.5 par défaut est discutable, le choix se fait avec le métier).
-
-    TODO (session 1): declare the fields of `__init__` and store the model and the
-    threshold as private attributes (`_model`, `_threshold`).
+    Le modèle, le seuil et la version sont injectés au constructeur : un test peut donc
+    fournir un faux modèle, sans joblib ni scikit-learn.
     """
 
-    def __init__(self, model: object, threshold: float) -> None:
-        # TODO (session 1): store the model and the threshold.
-        raise NotImplementedError
+    def __init__(self, model: object, threshold: float, model_version: str) -> None:
+        self._model = model
+        self._threshold = threshold
+        self._model_version = model_version
 
     def predict(self, order: OrderFeatures) -> Prediction:
-        """Return the eligibility prediction for one order.
+        """Return the eligibility prediction for one order."""
+        values = {name: getattr(order, name, None) for name in FEATURE_COLUMNS}
+        missing = sorted(name for name, value in values.items() if value is None)
+        if missing:
+            raise InvalidOrderError(f"Variables manquantes : {missing}")
 
-        TODO (session 1): move the body of notebook cell 34 here
-        (`predict_order_eligibility`), with these adaptations:
+        input_df = pd.DataFrame([values])
+        probability = float(self._model.predict_proba(input_df)[0, 1])
+        eligible = probability >= self._threshold
 
-        - build the scikit-learn input DataFrame with the FEATURE_COLUMNS of cell 20,
-          from the dataclass fields instead of a dict;
-        - raise a domain exception (`InvalidOrderError`) instead of `ValueError`;
-        - return a `Prediction` dataclass instead of a dict;
-        - keep the four outputs of the notebook: express_eligible, decision,
-          probability, model_version (plus predicted_at).
-        """
-        raise NotImplementedError
+        return Prediction(
+            order_id=order.order_id,
+            express_eligible=bool(eligible),
+            decision="oui" if eligible else "non",
+            probability=round(probability, 4),
+            model_version=self._model_version,
+            predicted_at=datetime.now(timezone.utc),
+        )
