@@ -29,7 +29,7 @@ Deux règles qui rendent ce fichier utile, et pas décoratif :
 
 | Séance | Liste de travail | Statut |
 |---|---|---|
-| 1 — Du notebook à une application | `docs/seance/seance-01.md` | ☐ |
+| 1 — Du notebook à une application | `docs/seance/seance-01.md` | ☒ |
 | 2 — Exécuter partout | `docs/seance/seance-02.md` | *sera distribuée en séance* |
 | 3 — Livrer en continu | `docs/seance/seance-03.md` | *sera distribuée en séance* |
 | 4 — Fiabiliser les données et tracer l'entraînement | `docs/seance/seance-04.md` | *sera distribuée en séance* |

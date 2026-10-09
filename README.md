@@ -10,20 +10,29 @@ consiste à **implémenter** les classes abstraites, à **câbler** les couches 
 ## Démarrage
 
 ```bash
-python -m venv .venv
+uv venv .venv --python 3.13          # ou : python3.13 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt -r requirements-dev.txt
-cp .env.example .env
-pip install -e .
+uv pip install -r requirements.txt -r requirements-dev.txt
+cp .env.example .env                 # puis remplir les valeurs (voir ci-dessous)
+uv pip install -e .
+python -m livraison_express train    # produit artifacts/express_delivery_model.joblib
+python -m livraison_express serve    # API sur http://localhost:8000/docs
 ```
 
-Puis, dans l'ordre :
+Valeurs à renseigner dans `.env` (aucune n'a de défaut : l'application refuse de démarrer
+si l'une manque ou est invalide) :
 
-1. Exécutez le notebook `notebooks/project_test_v1_final_final2.ipynb` de bout en bout.
-   Il produit `notebooks/artifacts/express_delivery_model.joblib`, dont l'application a besoin.
-2. Ouvrez `docs/seance/seance-01.md` : c'est votre liste de travail du jour.
-3. Suivez la consigne (`seance-0N.md`), qui est remise en séance par l'enseignant.
-4. `docs/ROADMAP.md` sert à vous repérer dans le projet, pas à anticiper les séances.
+| Clé | Exemple | Rôle |
+|---|---|---|
+| `ENVIRONMENT` | `local` | `local`, `test` ou `prod` (en `test`, les commandes sont en mémoire) |
+| `MODEL_PATH` | `artifacts/express_delivery_model.joblib` | où `train` écrit et où l'API lit le modèle |
+| `MODEL_THRESHOLD` | `0.5` | seuil de décision, entre 0 et 1 (cellule 31) |
+| `MODEL_VERSION` | `1.0.0` | version du modèle, renvoyée dans chaque prédiction |
+| `ORDER_STORE_DSN` | `sqlite:///./data/orders.db` | où sont rangées les commandes (ADR-0001) |
+| `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING` ou `ERROR` |
+
+Sans `.joblib`, l'API démarre quand même : `/health` répond 200, `/health/ready` et
+`/v1/predictions` répondent 503 (ADR-0002).
 
 ## Lancement
 
@@ -88,3 +97,29 @@ Vous y ajouterez vos propres documents au fil des séances, au fur et à mesure 
 décision technique structurée. Une décision = un fichier. C'est court, c'est daté, et c'est
 ce qu'on vous demandera à l'oral de la soutenance. Le numéro de chaque décision est donné
 dans votre liste de travail du jour.
+
+## Décisions d'architecture
+
+- [ADR-0001 : stockage des commandes](docs/decisions/ADR-0001-stockage-des-commandes.md)
+- [ADR-0002 : stockage du modèle](docs/decisions/ADR-0002-stockage-du-modele.md)
+
+## Pourquoi `api/routers/predictions.py` n'a-t-il pas le droit d'importer `joblib` ?
+
+(À écrire : trois lignes, avec tes mots.)
+
+## Qui a fait quoi
+
+(À écrire.)
+
+## Limites assumées
+
+- Les prédictions ne sont pas conservées en séance 1 : l'historique arrive en séance 5.
+- SQLite (ADR-0001) et le répertoire local pour le modèle (ADR-0002) sont des choix
+  provisoires, valables pour une seule instance de l'API.
+- Les variables `weather`, `delivery_zone` et `customer_type` sont obligatoires dans
+  `schemas.py` (le squelette leur donnait une valeur par défaut) : le contrat OpenAPI dit
+  qu'une variable absente doit produire un 422.
+- Le `/docs` généré par FastAPI affiche encore son format d'erreur 422 par défaut, alors
+  que les réponses réelles suivent le format `{error, message, details}` du contrat.
+- Le jeu de données est synthétique (cellule 8) : les métriques ne disent rien des
+  performances sur de vraies commandes.

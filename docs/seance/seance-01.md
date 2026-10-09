@@ -1,6 +1,6 @@
 # Séance 1 — Du notebook à une application
 
-> **Date** : ____/____ · **Équipe** : ____________________
+> **Date** : 09/10/2026 · **Équipe** : ____________________
 > Durée : 7 h (2 h de cours, 5 h de TP) · ADR du jour : **ADR-0001**, **ADR-0002**
 > Consigne complète remise en séance. Feuille de route : [`../ROADMAP.md`](../ROADMAP.md).
 
@@ -151,16 +151,16 @@ ruff check .
 
 Cochez **et vérifiez**. Une case cochée doit pouvoir être prouvée par la commande indiquée.
 
-- [ ] `pytest` passe, sans `NotImplementedError` ni test ignoré → `pytest`
-- [ ] `ruff check .` ne signale rien → `ruff check .`
-- [ ] `GET /health` renvoie 200 → `curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/health`
-- [ ] `POST /v1/predictions` renvoie une prédiction conforme au contrat → `curl -X POST localhost:8000/v1/predictions -H 'Content-Type: application/json' -d @order.json`
-- [ ] une commande invalide renvoie **422**, pas 500 → même commande avec `"hour": 25`
-- [ ] `GET /v1/orders/{order_id}` renvoie **404** pour un identifiant inconnu → `curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/v1/orders/CMD-999999`
-- [ ] `python -m livraison_express train` produit un `.joblib` relançable
-- [ ] l'API démarre **sans** `.joblib` et le signale sur `/health/ready` (503)
-- [ ] `ADR-0001` et `ADR-0002` écrits, avec au moins 3 options comparées chacun
-- [ ] aucune violation de la règle de dépendance :
+- [x] `pytest` passe, sans `NotImplementedError` ni test ignoré → `pytest`
+- [x] `ruff check .` ne signale rien → `ruff check .`
+- [x] `GET /health` renvoie 200 → `curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/health`
+- [x] `POST /v1/predictions` renvoie une prédiction conforme au contrat → `curl -X POST localhost:8000/v1/predictions -H 'Content-Type: application/json' -d @order.json`
+- [x] une commande invalide renvoie **422**, pas 500 → même commande avec `"hour": 25`
+- [x] `GET /v1/orders/{order_id}` renvoie **404** pour un identifiant inconnu → `curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/v1/orders/CMD-999999`
+- [x] `python -m livraison_express train` produit un `.joblib` relançable
+- [x] l'API démarre **sans** `.joblib` et le signale sur `/health/ready` (503)
+- [x] `ADR-0001` et `ADR-0002` écrits, avec au moins 3 options comparées chacun
+- [x] aucune violation de la règle de dépendance :
 
 ```bash
 grep -rn "infrastructure" src/livraison_express/{domain,application,abstractions,api} \
