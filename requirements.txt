@@ -1,0 +1,16 @@
+# Runtime dependencies.
+# Versions are pinned so that the whole cohort runs the exact same stack.
+# Do not upgrade a version during the course without telling the group:
+# an upgrade can silently break a cell of the notebook or a scaffold file.
+
+# --- API (session 1) ---
+fastapi==0.142.2
+uvicorn[standard]==0.54.0
+pydantic==2.13.5
+pydantic-settings==2.15.0
+
+# --- Model (session 1) ---
+scikit-learn==1.9.1
+pandas==3.0.6
+numpy==2.5.3
+joblib==1.6.0

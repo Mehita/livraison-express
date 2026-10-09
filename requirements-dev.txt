@@ -1,0 +1,12 @@
+# Development and test dependencies.
+# Install them on top of requirements.txt:
+#   pip install -r requirements.txt -r requirements-dev.txt
+
+# --- Quality (all sessions) ---
+pytest==9.1.1
+httpx==0.28.1
+ruff==0.16.10
+
+# --- Notebook / data exploration ---
+matplotlib==3.11.2
+seaborn==0.13.2
