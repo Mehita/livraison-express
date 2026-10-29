@@ -1,0 +1,53 @@
+# Lancer l'API :              docker compose up --build
+# Entraîner le modèle (1 fois) : docker compose --profile train run --rm trainer
+
+x-app-environment: &app-environment
+  ENVIRONMENT: ${ENVIRONMENT:-local}
+  MODEL_PATH: /artifacts/express_delivery_model.joblib
+  MODEL_THRESHOLD: ${MODEL_THRESHOLD:-0.5}
+  MODEL_VERSION: ${MODEL_VERSION:-1.0.0}
+  ORDER_STORE_DSN: sqlite:////data/orders.db
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+x-app-volumes: &app-volumes
+  - model_artifacts:/artifacts
+  - order_data:/data
+
+services:
+  api:
+    build: .
+    image: livraison-express:local
+    ports:
+      - "8000:8000"
+    environment: *app-environment
+    volumes: *app-volumes
+    restart: unless-stopped
+    # Durcissement : système de fichiers en lecture seule, aucune capacité Linux,
+    # pas d'élévation de privilèges. Seuls /artifacts, /data et /tmp sont inscriptibles.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  # Entraînement : un job ponctuel, jamais dans le service qui répond aux requêtes
+  trainer:
+    build: .
+    image: livraison-express:local
+    profiles: ["train"]
+    command: ["python", "-m", "livraison_express", "train"]
+    environment: *app-environment
+    volumes: *app-volumes
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  model_artifacts:
+  order_data:
