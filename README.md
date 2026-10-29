@@ -44,12 +44,47 @@ python -m livraison_express predict --file order.json
 
 La documentation interactive de l'API est disponible sur <http://localhost:8000/docs>.
 
+## Docker
+
+L'image est construite en deux étapes (environnement Python, puis image finale), tourne avec
+un utilisateur non-root et ne contient ni secret ni modèle : le modèle est entraîné par un job
+dédié et rangé dans un volume (voir ADR-0002).
+
+```bash
+docker compose --profile train run --rm trainer   # entraîner le modèle (une seule fois)
+docker compose up -d                              # démarrer l'API sur http://localhost:8000
+curl -s localhost:8000/health/ready               # doit répondre "ready"
+docker compose down                               # arrêter (les volumes gardent modèle et base)
+```
+
+Durcissement de l'image et du conteneur :
+
+- utilisateur non-root (uid 10001), sans shell ;
+- système de fichiers en lecture seule (seuls `/artifacts`, `/data` et `/tmp` sont inscriptibles) ;
+- aucune capacité Linux (`cap_drop: ALL`) et `no-new-privileges` ;
+- ni `.env`, ni tests, ni documentation, ni modèle dans l'image (`.dockerignore`), et pas de `pip` ;
+- versions des dépendances figées.
+
+Optimisation : l'image est passée de 701 Mo à 542 Mo (129 Mo compressée) grâce au build
+multi-étapes, à la base `python:3.13-slim`, au retrait des dossiers `tests/` des
+bibliothèques, à `uvicorn` sans ses extras et à l'absence de cache `pip`.
+
 ## Tests et qualité
 
 ```bash
 pytest
 ruff check .
 ```
+
+## Intégration continue
+
+| Workflow | Déclencheur | Rôle |
+|---|---|---|
+| `CI` (`.github/workflows/ci.yml`) | push sur `main` ou `develop`, Pull Request | `ruff check .` puis `pytest` |
+| `Release image` (`.github/workflows/release-image.yml`) | release publiée | construit l'image et la publie sur `ghcr.io` (tags `1.2.3`, `1.2` et `latest`) |
+
+Les choix d'outils (`ruff` plutôt que `pylint`, `ghcr.io`) sont justifiés dans
+[ADR-0003](docs/decisions/ADR-0003-integration-continue.md).
 
 ## Règles du projet
 
@@ -102,6 +137,7 @@ dans votre liste de travail du jour.
 
 - [ADR-0001 : stockage des commandes](docs/decisions/ADR-0001-stockage-des-commandes.md)
 - [ADR-0002 : stockage du modèle](docs/decisions/ADR-0002-stockage-du-modele.md)
+- [ADR-0003 : intégration continue](docs/decisions/ADR-0003-integration-continue.md)
 
 ## Pourquoi `api/routers/predictions.py` n'a-t-il pas le droit d'importer `joblib` ?
 
@@ -123,3 +159,11 @@ dans votre liste de travail du jour.
   que les réponses réelles suivent le format `{error, message, details}` du contrat.
 - Le jeu de données est synthétique (cellule 8) : les métriques ne disent rien des
   performances sur de vraies commandes.
+
+## Contribuer et licence
+
+Le workflow de branches (GitFlow), les conventions de commit et le processus de release sont
+décrits dans [CONTRIBUTING.md](CONTRIBUTING.md). Une vulnérabilité se signale selon
+[SECURITY.md](SECURITY.md), et la collaboration suit le [code de conduite](CODE_OF_CONDUCT.md).
+
+Ce projet est distribué sous licence MIT (voir [LICENSE](LICENSE)).
