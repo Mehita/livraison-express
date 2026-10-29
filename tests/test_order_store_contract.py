@@ -70,6 +70,26 @@ class OrderStoreContractTests:
 
         assert store.get("CMD-000001") == updated
 
+    def test_get_all_on_an_empty_store_returns_an_empty_list(self) -> None:
+        assert self.make_store().get_all() == []
+
+    def test_get_all_returns_the_saved_order(self) -> None:
+        store = self.make_store()
+        order = _order("CMD-000001")
+        store.save(order)
+
+        assert store.get_all() == [order]
+
+    def test_get_all_returns_every_saved_order_once(self) -> None:
+        store = self.make_store()
+        for order_id in ("CMD-000002", "CMD-000001", "CMD-000003"):
+            store.save(_order(order_id))
+        store.save(_order("CMD-000001"))
+
+        ids = sorted(order.order_id for order in store.get_all())
+
+        assert ids == ["CMD-000001", "CMD-000002", "CMD-000003"]
+
 
 class TestInMemoryOrderStore(OrderStoreContractTests):
     def make_store(self) -> OrderStore:

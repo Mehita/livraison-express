@@ -59,6 +59,15 @@ class OrderStore(ABC):
         """Return the stored order, or None if it does not exist."""
         raise NotImplementedError
 
+    @abstractmethod
+    def get_all(self) -> list[OrderFeatures]:
+        """Return every stored order, each one exactly once.
+
+        An empty store returns an empty list, never None. The order of the list is not
+        guaranteed: a caller that needs an order sorts it itself.
+        """
+        raise NotImplementedError
+
     # TODO (session 1): declare the other methods your use cases need, with their
     # docstring. Typical needs: listing orders (pagination for a back-office),
     # iterating over the orders to predict (batch), deleting them (right to erasure),

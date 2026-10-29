@@ -43,6 +43,10 @@ class InMemoryOrderStore(OrderStore):
         """Return the stored order, or None if it does not exist."""
         return self._orders.get(order_id)
 
+    def get_all(self) -> list[OrderFeatures]:
+        """Return every stored order."""
+        return list(self._orders.values())
+
     def count(self) -> int:
         """Return the number of stored orders (used by the health check)."""
         return len(self._orders)
