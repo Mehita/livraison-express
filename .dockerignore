@@ -1,0 +1,36 @@
+# Versionnement et outils
+.git
+.github
+.gitignore
+.idea
+.vscode
+.DS_Store
+
+# Environnements et caches Python
+.venv
+venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Secrets et configuration locale : ne jamais entrer dans une image
+.env
+.env.*
+!.env.example
+
+# Données, modèle et notebook : ils ne font pas partie de l'image
+artifacts
+data
+*.joblib
+*.db
+notebooks
+
+# Tests et documentation : inutiles à l'exécution
+tests
+docs
+*.md
+Dockerfile
+docker-compose.yml
