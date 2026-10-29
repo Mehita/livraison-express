@@ -23,6 +23,10 @@ def _path_from_dsn(dsn: str) -> str:
     return dsn.removeprefix(_PREFIX)
 
 
+def _to_order(row: tuple) -> OrderFeatures:
+    return OrderFeatures(**dict(zip(_COLUMNS, row, strict=True)))
+
+
 class SqliteOrderStore(OrderStore):
     """Store orders in a SQLite file, one row per `order_id`."""
 
@@ -60,4 +64,12 @@ class SqliteOrderStore(OrderStore):
             ).fetchone()
         if row is None:
             return None
-        return OrderFeatures(**dict(zip(_COLUMNS, row, strict=True)))
+        return _to_order(row)
+
+    def get_all(self) -> list[OrderFeatures]:
+        """Return every stored order, ordered by identifier."""
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                f"SELECT {', '.join(_COLUMNS)} FROM orders ORDER BY order_id"
+            ).fetchall()
+        return [_to_order(row) for row in rows]
