@@ -90,11 +90,11 @@ COLLECTED_ORDERS = "collected_orders"
 
 
 def _build_order_store(settings: Settings) -> OrderStore:
-    """Pick the adapter: tests run in memory, otherwise the DSN's scheme decides."""
-    if settings.environment == "test":
-        return InMemoryOrderStore()
+    """Pick the adapter: an explicit MongoDB DSN wins, else tests run in memory, else SQLite."""
     if settings.order_store_dsn.startswith("mongodb"):
         return MongoOrderStore.from_dsn(settings.order_store_dsn, collection=COLLECTED_ORDERS)
+    if settings.environment == "test":
+        return InMemoryOrderStore()
     return SqliteOrderStore(settings.order_store_dsn)
 
 def build_container(settings: Settings | None = None) -> Container:
