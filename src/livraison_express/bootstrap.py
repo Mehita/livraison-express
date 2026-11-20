@@ -33,8 +33,8 @@ from .domain.exceptions import ModelNotAvailableError
 from .domain.predictor import EligibilityPredictor
 from .infrastructure.dev.in_memory_model_repository import FileModelRepository
 from .infrastructure.dev.in_memory_order_store import InMemoryOrderStore
-from .infrastructure.mongo.mongo_order_store import MongoOrderStore
 from .infrastructure.dev.synthetic_orders import generate_labeled_orders
+from .infrastructure.mongo.mongo_order_store import MongoOrderStore
 from .infrastructure.sqlite.sqlite_order_store import SqliteOrderStore
 
 logger = logging.getLogger(__name__)
