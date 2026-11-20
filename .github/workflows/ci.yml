@@ -18,6 +18,22 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    # MongoDB pour les tests d'intégration (même version qu'en local, ADR-0004)
+    services:
+      mongo:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping: 1})'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      MONGO_TEST_URI: mongodb://localhost:27017
+
     steps:
       - uses: actions/checkout@v4
 
@@ -35,4 +51,4 @@ jobs:
         run: ruff check .
 
       - name: Tests (pytest)
-        run: pytest
+        run: pytest -rs
