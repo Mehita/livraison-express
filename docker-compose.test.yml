@@ -1,0 +1,37 @@
+# Environnement de TEST : MongoDB jetable (données en mémoire), sans mot de passe.
+# Se superpose au socle docker-compose.yml :
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml up --build -d
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml --profile train run --rm trainer
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml down -v
+# Le port 27017 est publié : arrêter d'abord un éventuel `mongo-dev` local.
+
+name: livraison-express-test
+
+x-test-environment: &test-environment
+  ENVIRONMENT: test
+  ORDER_STORE_DSN: mongodb://mongo:27017/livraison_express_test
+
+services:
+  mongo:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    tmpfs:
+      - /data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ping: 1})"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    environment: *test-environment
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  trainer:
+    environment: *test-environment
+    depends_on:
+      mongo:
+        condition: service_healthy
