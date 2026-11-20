@@ -7,13 +7,20 @@ sous-classes, une par implémentation. Ajouter un adaptateur = deux lignes.
 
 from __future__ import annotations
 
+import os
 import tempfile
 from dataclasses import replace
 from pathlib import Path
+from uuid import uuid4
+
+import pytest
+from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 
 from livraison_express.abstractions.order_store import OrderStore
 from livraison_express.domain.entities import OrderFeatures
 from livraison_express.infrastructure.dev.in_memory_order_store import InMemoryOrderStore
+from livraison_express.infrastructure.mongo.mongo_order_store import MongoOrderStore
 from livraison_express.infrastructure.sqlite.sqlite_order_store import SqliteOrderStore
 
 
@@ -107,3 +114,26 @@ class TestSqliteOrderStore(OrderStoreContractTests):
         SqliteOrderStore(path).save(_order("CMD-000001"))
 
         assert SqliteOrderStore(path).get("CMD-000001") == _order("CMD-000001")
+
+
+@pytest.mark.integration
+class TestMongoOrderStore(OrderStoreContractTests):
+    """Needs a real MongoDB (MONGO_TEST_URI, localhost by default); skipped without one."""
+
+    _uri = os.environ.get("MONGO_TEST_URI", "mongodb://localhost:27017")
+
+    @pytest.fixture(autouse=True)
+    def _drop_test_database(self):
+        yield
+        database = getattr(self, "_database", None)
+        if database is not None:
+            MongoClient(self._uri).drop_database(database)
+
+    def make_store(self) -> OrderStore:
+        client = MongoClient(self._uri, serverSelectionTimeoutMS=1000)
+        try:
+            client.admin.command("ping")
+        except PyMongoError:
+            pytest.skip("MongoDB indisponible : test d'intégration ignoré")
+        self._database = f"test_{uuid4().hex[:12]}"
+        return MongoOrderStore(self._uri, self._database)
