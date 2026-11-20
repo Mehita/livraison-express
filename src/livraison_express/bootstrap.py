@@ -34,6 +34,7 @@ from .domain.predictor import EligibilityPredictor
 from .infrastructure.dev.in_memory_model_repository import FileModelRepository
 from .infrastructure.dev.in_memory_order_store import InMemoryOrderStore
 from .infrastructure.dev.synthetic_orders import generate_labeled_orders
+from .infrastructure.mongo.mongo_order_store import MongoOrderStore
 from .infrastructure.sqlite.sqlite_order_store import SqliteOrderStore
 
 logger = logging.getLogger(__name__)
@@ -85,12 +86,16 @@ class Container:
         return PredictEligibility(self.predictor)
 
 
+COLLECTED_ORDERS = "collected_orders"
+
+
 def _build_order_store(settings: Settings) -> OrderStore:
-    """Factory: choose the OrderStore from the environment, nothing else knows."""
+    """Pick the adapter: tests run in memory, otherwise the DSN's scheme decides."""
     if settings.environment == "test":
         return InMemoryOrderStore()
+    if settings.order_store_dsn.startswith("mongodb"):
+        return MongoOrderStore.from_dsn(settings.order_store_dsn, collection=COLLECTED_ORDERS)
     return SqliteOrderStore(settings.order_store_dsn)
-
 
 def build_container(settings: Settings | None = None) -> Container:
     """Build the object graph. Tests pass their own `settings`."""
