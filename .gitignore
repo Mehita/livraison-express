@@ -30,3 +30,6 @@ data/
 *.db
 
 .env.prod
+
+# Modèle sans secret, à versionner
+!.env.prod.example
