@@ -6,6 +6,7 @@
 | validation Pydantic / FastAPI| 422       | `validation_error`  |
 | `OrderNotFoundError`         | 404       | `order_not_found`   |
 | `ModelNotAvailableError`     | 503       | `model_unavailable` |
+| `OrderStoreUnavailableError` | 503       | `order_store_unavailable` |
 | toute autre exception        | 500       | `internal_error`    |
 
 Les codes `error` sont un contrat : un client branche son monitoring dessus. Les messages
@@ -20,7 +21,12 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from ..domain.exceptions import InvalidOrderError, ModelNotAvailableError, OrderNotFoundError
+from ..domain.exceptions import (
+    InvalidOrderError,
+    ModelNotAvailableError,
+    OrderNotFoundError,
+    OrderStoreUnavailableError,
+)
 from .schemas import ErrorResponse
 
 logger = logging.getLogger(__name__)
@@ -56,6 +62,14 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ModelNotAvailableError)
     async def handle_model_unavailable(request: Request, exc: ModelNotAvailableError):
         return _error_response(503, "model_unavailable", str(exc))
+
+    @app.exception_handler(OrderStoreUnavailableError)
+    async def handle_order_store_unavailable(request: Request, exc: OrderStoreUnavailableError):
+        # Le détail technique reste dans les logs : le client n'a pas à le voir.
+        logger.error("Order store unavailable: %s", exc)
+        return _error_response(
+            503, "order_store_unavailable", "Stockage des commandes indisponible"
+        )
 
     @app.exception_handler(Exception)
     async def handle_unexpected(request: Request, exc: Exception):
