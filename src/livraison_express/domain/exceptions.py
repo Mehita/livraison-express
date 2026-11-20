@@ -41,3 +41,7 @@ class InvalidOrderError(DomainError):
 
 class OrderNotFoundError(DomainError):
     """Aucune commande ne porte cet identifiant."""
+
+
+class OrderStoreUnavailableError(DomainError):
+    """Le stockage des commandes ne répond pas (base arrêtée, réseau coupé, délai dépassé)."""
