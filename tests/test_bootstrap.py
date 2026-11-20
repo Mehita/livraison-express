@@ -11,6 +11,7 @@ from livraison_express.config import Settings
 from livraison_express.domain.entities import OrderFeatures
 from livraison_express.domain.exceptions import ModelNotAvailableError
 from livraison_express.infrastructure.dev.in_memory_order_store import InMemoryOrderStore
+from livraison_express.infrastructure.mongo.mongo_order_store import MongoOrderStore
 from livraison_express.infrastructure.sqlite.sqlite_order_store import SqliteOrderStore
 
 
@@ -65,3 +66,16 @@ def test_order_store_is_chosen_from_the_environment(tmp_path: Path) -> None:
     """The factory is the only place that knows which OrderStore runs where."""
     assert isinstance(build_container(_settings(tmp_path, "test")).order_store, InMemoryOrderStore)
     assert isinstance(build_container(_settings(tmp_path, "local")).order_store, SqliteOrderStore)
+
+
+def test_a_mongodb_dsn_selects_the_mongo_adapter(tmp_path: Path) -> None:
+    """The DSN's scheme picks the adapter; building it does not connect (lazy client)."""
+    settings = _settings(tmp_path, "local").model_copy(
+        update={"order_store_dsn": "mongodb://localhost:1/livraison_express"}
+    )
+
+    store = build_container(settings).order_store
+
+    assert isinstance(store, MongoOrderStore)
+    assert store._orders.database.name == "livraison_express"
+    assert store._orders.name == "collected_orders"
