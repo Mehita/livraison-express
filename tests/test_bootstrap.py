@@ -79,3 +79,12 @@ def test_a_mongodb_dsn_selects_the_mongo_adapter(tmp_path: Path) -> None:
     assert isinstance(store, MongoOrderStore)
     assert store._orders.database.name == "livraison_express"
     assert store._orders.name == "collected_orders"
+
+
+def test_an_explicit_mongodb_dsn_wins_even_in_the_test_environment(tmp_path: Path) -> None:
+    """The `test` compose runs the real MongoDB: the DSN is respected, not overridden."""
+    settings = _settings(tmp_path, "test").model_copy(
+        update={"order_store_dsn": "mongodb://localhost:1/livraison_express_test"}
+    )
+
+    assert isinstance(build_container(settings).order_store, MongoOrderStore)

@@ -1,0 +1,44 @@
+# Environnement de PRODUCTION : MongoDB protégé par mot de passe, non exposé, données persistantes.
+# Les identifiants viennent de .env.prod (jamais dans Git, voir .env.prod.example) :
+#   docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+#   docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml --profile train run --rm trainer
+# Sans MONGO_USER ni MONGO_PASSWORD, Docker refuse de démarrer.
+
+name: livraison-express-prod
+
+x-prod-environment: &prod-environment
+  ENVIRONMENT: prod
+  ORDER_STORE_DSN: mongodb://${MONGO_USER:?MONGO_USER manquant}:${MONGO_PASSWORD:?MONGO_PASSWORD manquant}@mongo:27017/livraison_express?authSource=admin
+
+services:
+  # Aucun `ports:` : MongoDB n'est joignable que depuis le réseau Docker de l'application
+  mongo:
+    image: mongo:7.0
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:?MONGO_USER manquant}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?MONGO_PASSWORD manquant}
+    volumes:
+      - mongo_data:/data/db
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ping: 1})"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    environment: *prod-environment
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  trainer:
+    environment: *prod-environment
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+volumes:
+  mongo_data:
