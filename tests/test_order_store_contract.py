@@ -19,6 +19,7 @@ from pymongo.errors import PyMongoError
 
 from livraison_express.abstractions.order_store import OrderStore
 from livraison_express.domain.entities import OrderFeatures
+from livraison_express.domain.exceptions import OrderStoreUnavailableError
 from livraison_express.infrastructure.dev.in_memory_order_store import InMemoryOrderStore
 from livraison_express.infrastructure.mongo.mongo_order_store import MongoOrderStore
 from livraison_express.infrastructure.sqlite.sqlite_order_store import SqliteOrderStore
@@ -137,3 +138,19 @@ class TestMongoOrderStore(OrderStoreContractTests):
             pytest.skip("MongoDB indisponible : test d'intégration ignoré")
         self._database = f"test_{uuid4().hex[:12]}"
         return MongoOrderStore(self._uri, self._database)
+
+    def test_an_unreachable_server_raises_a_domain_error(self) -> None:
+        store = MongoOrderStore("mongodb://localhost:1", "test", timeout_ms=200)
+
+        with pytest.raises(OrderStoreUnavailableError):
+            store.get("CMD-000001")
+
+    def test_from_dsn_reads_the_database_name(self) -> None:
+        store = MongoOrderStore.from_dsn("mongodb://localhost:27017/livraison_express")
+
+        assert store._orders.database.name == "livraison_express"
+        assert store._orders.name == "orders"
+
+    def test_from_dsn_requires_a_database_name(self) -> None:
+        with pytest.raises(ValueError):
+            MongoOrderStore.from_dsn("mongodb://localhost:27017")
